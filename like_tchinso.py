@@ -71,7 +71,6 @@ def get_env(key: str) -> str:
 
 # ── X API 인증 ────────────────────────────────────────
 def get_oauth1() -> OAuth1:
-    """좋아요(POST)에 필요한 OAuth 1.0a 인증 객체."""
     return OAuth1(
         get_env("X_API_KEY"),
         get_env("X_API_SECRET"),
@@ -81,12 +80,10 @@ def get_oauth1() -> OAuth1:
 
 
 def get_bearer_header() -> dict:
-    """검색(GET)에 필요한 Bearer Token 헤더."""
     return {"Authorization": f"Bearer {get_env('X_BEARER_TOKEN')}"}
 
 
 def get_my_user_id() -> str:
-    """현재 인증된 사용자의 ID를 가져온다."""
     url = "https://api.twitter.com/2/users/me"
     resp = requests.get(url, auth=get_oauth1(), timeout=10)
     resp.raise_for_status()
@@ -97,13 +94,11 @@ def get_my_user_id() -> str:
 
 # ── 좋아요 기록 관리 (로컬 JSON) ─────────────────────
 def load_liked_ids() -> set:
-    """이미 좋아요를 누른 트윗 ID 목록을 로드한다."""
     if not LIKED_LOG_FILE.exists():
         return set()
     try:
         with open(LIKED_LOG_FILE) as f:
             data = json.load(f)
-        # 오래된 기록 정리 (LOG_RETENTION_DAYS일 이전 기록 삭제)
         cutoff = (datetime.now(timezone.utc) - timedelta(days=LOG_RETENTION_DAYS)).isoformat()
         cleaned = {tid: ts for tid, ts in data.items() if ts >= cutoff}
         return set(cleaned.keys())
@@ -112,8 +107,6 @@ def load_liked_ids() -> set:
 
 
 def save_liked_ids(liked_map: dict) -> None:
-    """좋아요 기록을 저장한다. {tweet_id: timestamp} 형식."""
-    # 오래된 기록 정리
     cutoff = (datetime.now(timezone.utc) - timedelta(days=LOG_RETENTION_DAYS)).isoformat()
     cleaned = {tid: ts for tid, ts in liked_map.items() if ts >= cutoff}
     with open(LIKED_LOG_FILE, "w") as f:
@@ -121,7 +114,6 @@ def save_liked_ids(liked_map: dict) -> None:
 
 
 def load_liked_map() -> dict:
-    """좋아요 기록을 dict 형태로 로드한다."""
     if not LIKED_LOG_FILE.exists():
         return {}
     try:
@@ -133,17 +125,12 @@ def load_liked_map() -> dict:
 
 # ── 해시태그 검색 ─────────────────────────────────────
 def search_tweets(hashtag: str, max_results: int = 50) -> list[dict]:
-    """
-    X API v2 Recent Search로 해시태그 트윗을 검색한다.
-    최근 24시간 이내 트윗만 가져온다.
-    """
     url = "https://api.twitter.com/2/tweets/search/recent"
-    # 24시간 전부터 검색
     since = (datetime.now(timezone.utc) - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     params = {
         "query": f"{hashtag} -is:retweet",
-        "max_results": min(max_results, 100),  # API 최대 100
+        "max_results": min(max_results, 100),
         "start_time": since,
         "tweet.fields": "author_id,created_at,public_metrics",
     }
@@ -170,7 +157,6 @@ def search_tweets(hashtag: str, max_results: int = 50) -> list[dict]:
 
 # ── 좋아요 실행 ───────────────────────────────────────
 def like_tweet(user_id: str, tweet_id: str) -> bool:
-    """X API v2로 특정 트윗에 좋아요를 누른다."""
     url = f"https://api.twitter.com/2/users/{user_id}/likes"
     payload = {"tweet_id": tweet_id}
 
@@ -183,7 +169,7 @@ def like_tweet(user_id: str, tweet_id: str) -> bool:
             return True
         else:
             log.info(f"  - 이미 좋아요됨: {tweet_id}")
-            return True  # 이미 좋아요된 것도 성공으로 처리
+            return True
     elif resp.status_code == 429:
         log.warning("  ✗ Rate limit 도달. 중단합니다.")
         return False
@@ -194,7 +180,6 @@ def like_tweet(user_id: str, tweet_id: str) -> bool:
 
 # ── 맞팔로우 기능 ─────────────────────────────────────
 def get_followers(user_id: str) -> set:
-    """내 팔로워 목록(user_id set)을 가져온다."""
     url = f"https://api.twitter.com/2/users/{user_id}/followers"
     followers = set()
     params = {"max_results": 1000}
@@ -216,7 +201,6 @@ def get_followers(user_id: str) -> set:
         for user in data.get("data", []):
             followers.add(user["id"])
 
-        # 페이지네이션
         next_token = data.get("meta", {}).get("next_token")
         if next_token:
             params["pagination_token"] = next_token
@@ -229,7 +213,6 @@ def get_followers(user_id: str) -> set:
 
 
 def get_following(user_id: str) -> set:
-    """내가 팔로우하는 목록(user_id set)을 가져온다."""
     url = f"https://api.twitter.com/2/users/{user_id}/following"
     following = set()
     params = {"max_results": 1000}
@@ -263,7 +246,6 @@ def get_following(user_id: str) -> set:
 
 
 def follow_user(my_user_id: str, target_user_id: str) -> bool:
-    """특정 유저를 팔로우한다."""
     url = f"https://api.twitter.com/2/users/{my_user_id}/following"
     payload = {"target_user_id": target_user_id}
 
@@ -290,10 +272,6 @@ def follow_user(my_user_id: str, target_user_id: str) -> bool:
 
 
 def do_follow_back(user_id: str, liked_author_ids: set, dry_run: bool = False) -> int:
-    """
-    좋아요를 누른 유저 중 나를 팔로우한 사람에게 맞팔로우한다.
-    이미 내가 팔로우하고 있는 사람은 제외.
-    """
     log.info("\n" + "=" * 50)
     log.info("맞팔로우 체크 시작")
     log.info(f"좋아요 누른 유저: {len(liked_author_ids)}명")
@@ -303,11 +281,9 @@ def do_follow_back(user_id: str, liked_author_ids: set, dry_run: bool = False) -
         log.info("좋아요 누른 유저가 없어 맞팔로우 건너뜀.")
         return 0
 
-    # 내 팔로워 & 팔로잉 조회
     my_followers = get_followers(user_id)
     my_following = get_following(user_id)
 
-    # 좋아요 누른 유저 중, 나를 팔로우하면서 내가 아직 팔로우 안 한 유저
     follow_targets = liked_author_ids & my_followers - my_following
     log.info(f"맞팔로우 대상: {len(follow_targets)}명 "
              f"(좋아요 유저 중 팔로워이면서 내가 미팔로우)")
@@ -316,7 +292,6 @@ def do_follow_back(user_id: str, liked_author_ids: set, dry_run: bool = False) -
         log.info("맞팔로우할 대상이 없습니다.")
         return 0
 
-    # 최대 개수 제한
     targets_list = list(follow_targets)[:MAX_FOLLOWS_PER_RUN]
 
     if dry_run:
@@ -332,7 +307,7 @@ def do_follow_back(user_id: str, liked_author_ids: set, dry_run: bool = False) -
             follow_count += 1
         else:
             break
-        time.sleep(2)  # 팔로우 간 2초 대기
+        time.sleep(2)
 
     log.info(f"맞팔로우 완료: {follow_count}/{len(targets_list)}명")
     return follow_count
@@ -368,7 +343,6 @@ def main() -> None:
         already_liked = set(liked_map.keys())
         log.info(f"기존 좋아요 기록: {len(already_liked)}개")
 
-        # 모든 해시태그에서 트윗 수집
         all_tweets = []
         seen_ids = set()
         for tag in HASHTAGS:
@@ -394,7 +368,6 @@ def main() -> None:
                     metrics = t.get("public_metrics", {})
                     log.info(f"  {i}. [{t['id']}] {text_preview}...")
                     log.info(f"     ❤️ {metrics.get('like_count', 0)}  🔁 {metrics.get('retweet_count', 0)}")
-                # dry-run에서도 author_id 수집 (맞팔로우 시뮬레이션용)
                 liked_author_ids = {t["author_id"] for t in target_tweets if "author_id" in t}
             else:
                 user_id = get_my_user_id()
@@ -416,8 +389,6 @@ def main() -> None:
                 log.info(f"\n좋아요 완료! {success_count}/{len(target_tweets)}개 성공")
         else:
             log.info("새로운 트윗이 없습니다.")
-            # 기존 좋아요 기록에서 author_id 가져오기 (맞팔로우용)
-            # → 기존 기록에는 author_id가 없으므로 전체 수집된 트윗에서 가져옴
             liked_author_ids = {t["author_id"] for t in all_tweets if "author_id" in t}
 
     # ── STEP 2: 맞팔로우 ──
@@ -426,7 +397,6 @@ def main() -> None:
             user_id = get_my_user_id()
 
         if follow_only:
-            # --follow-only 모드: 최근 해시태그 트윗 작성자 전부를 대상으로
             log.info("팔로우 전용 모드: 해시태그 트윗 작성자 수집 중...")
             for tag in HASHTAGS:
                 tweets = search_tweets(tag, max_results=100)
