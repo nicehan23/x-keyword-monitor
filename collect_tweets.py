@@ -94,7 +94,7 @@ def collect_tweets_for_keyword(keyword: str):
 
     try:
         response = x_client.search_recent_tweets(
-            query=f"{keyword} -is:retweet -from:qanda_zoe",
+            query=f"{keyword} -is:retweet",
             max_results=100,
             start_time=start_time,
             tweet_fields=["created_at", "public_metrics", "lang", "author_id", "conversation_id"],
