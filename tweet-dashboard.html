@@ -226,10 +226,9 @@
   <div class="loading"><div class="spinner"></div><p style="margin-top:12px">불러오는 중...</p></div>
 </div>
 <div class="pagination" id="pagination"></div>
-<script src="config.js"></script>
 <script>
-const SUPABASE_URL = CONFIG.SUPABASE_URL;
-const SUPABASE_KEY = CONFIG.SUPABASE_KEY;
+const SUPABASE_URL = "https://nuauodpvylurlynlwcfy.supabase.co";
+const SUPABASE_KEY = "sb_publishable_A-2qRZZRzB5p-ClUDGygzQ_KX6wAykW";
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const RT_HIGHLIGHT_THRESHOLD = 50;
 let allTweets = [];
