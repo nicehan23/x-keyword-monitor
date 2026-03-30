@@ -220,22 +220,18 @@ function switchTab(kw) {
 // ════════════════════════════════════════
 function renderTop5() {
   const section = document.getElementById("top5Section");
-  const now = new Date();
-  const day = now.getDay();
-  const mondayOffset = day === 0 ? 6 : day - 1;
-  const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - mondayOffset);
-  weekStart.setHours(0, 0, 0, 0);
+  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-  const weekTweets = allTweets.filter(t => new Date(t.created_at) >= weekStart);
+  const weekTweets = allTweets.filter(t => new Date(t.created_at) >= weekAgo);
   const top5 = [...weekTweets].sort((a, b) => (b.retweet_count || 0) - (a.retweet_count || 0)).slice(0, 5);
 
   if (!top5.length) {
-    section.innerHTML = "";
+    section.innerHTML = `<h3>🔥 최근 7일 인기 트윗 TOP 5</h3><p style="color:var(--text2);font-size:14px;margin-top:8px;">최근 7일간 수집된 트윗이 없습니다.</p>`;
     return;
   }
 
   section.innerHTML = `
-    <h3>🔥 이번 주 인기 트윗 TOP 5</h3>
+    <h3>🔥 최근 7일 인기 트윗 TOP 5</h3>
     <div class="top5-list">
       ${top5.map((t, i) => {
         const date = new Date(t.created_at);
