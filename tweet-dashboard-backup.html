@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>공부법 트윗 자동생성 대시보드</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--bg:#0f1419;--card:#16202a;--border:#2f3336;--text:#e7e9ea;--sub:#71767b;--blue:#1d9bf0;--green:#00ba7c;--red:#f4212e;--orange:#ff7a00;--purple:#7856ff}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.header{padding:24px 32px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.header h1{font-size:22px;font-weight:700}.header h1 span{color:var(--blue)}
+.header-actions{display:flex;gap:12px;align-items:center}
+.refresh-btn{background:var(--blue);color:#fff;border:none;padding:8px 16px;border-radius:20px;font-size:14px;cursor:pointer;font-weight:600}
+.refresh-btn:hover{opacity:.85}
+.auto-label{color:var(--sub);font-size:13px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;padding:24px 32px}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px}
+.stat-card .label{font-size:13px;color:var(--sub);margin-bottom:8px}
+.stat-card .value{font-size:28px;font-weight:700}
+.stat-card .value.blue{color:var(--blue)}.stat-card .value.green{color:var(--green)}
+.stat-card .value.orange{color:var(--orange)}.stat-card .value.red{color:var(--red)}.stat-card .value.purple{color:var(--purple)}
+.filters{padding:0 32px;display:flex;gap:8px;border-bottom:1px solid var(--border)}
+.filter-tab{padding:12px 16px;font-size:14px;color:var(--sub);cursor:pointer;border:none;border-bottom:2px solid transparent;background:none;font-weight:500}
+.filter-tab:hover{color:var(--text)}.filter-tab.active{color:var(--blue);border-bottom-color:var(--blue);font-weight:700}
+.tweet-list{padding:16px 32px;display:flex;flex-direction:column;gap:12px}
+.tweet-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;transition:border-color .2s}
+.tweet-card:hover{border-color:var(--blue)}
+.tweet-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.tweet-status{font-size:12px;font-weight:600;padding:4px 12px;border-radius:12px}
+.status-posted{background:rgba(0,186,124,.15);color:var(--green)}
+.status-generated{background:rgba(29,155,240,.15);color:var(--blue)}
+.status-failed{background:rgba(244,33,46,.15);color:var(--red)}
+.tweet-date{font-size:13px;color:var(--sub)}
+.tweet-text{font-size:16px;line-height:1.6;white-space:pre-wrap;margin-bottom:12px}
+.tweet-meta{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.tweet-chars{font-size:12px;color:var(--sub);background:rgba(255,255,255,.05);padding:3px 10px;border-radius:8px}
+.tweet-link{font-size:13px;color:var(--blue);text-decoration:none}
+.tweet-link:hover{text-decoration:underline}
+.tweet-copy{font-size:12px;color:var(--sub);background:none;border:1px solid var(--border);padding:4px 12px;border-radius:8px;cursor:pointer}
+.tweet-copy:hover{border-color:var(--blue);color:var(--blue)}
+.source-toggle{font-size:12px;color:var(--sub);background:none;border:none;cursor:pointer;margin-top:8px}
+.source-toggle:hover{color:var(--blue)}
+.source-list{display:none;margin-top:10px;padding:12px;background:rgba(255,255,255,.03);border-radius:8px;font-size:13px;color:var(--sub);line-height:1.8}
+.source-list.open{display:block}
+.empty{text-align:center;padding:60px 20px;color:var(--sub)}
+.empty-icon{font-size:48px;margin-bottom:16px}.empty-text{font-size:16px}
+.loading{text-align:center;padding:40px;color:var(--sub)}
+.spinner{display:inline-block;width:24px;height:24px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.pagination{padding:20px 32px;display:flex;justify-content:center;gap:8px}
+.page-btn{background:var(--card);border:1px solid var(--border);color:var(--text);padding:8px 16px;border-radius:8px;cursor:pointer;font-size:14px}
+.page-btn:hover{border-color:var(--blue)}.page-btn:disabled{opacity:.3;cursor:default}.page-btn.active{background:var(--blue);border-color:var(--blue)}
+@media(max-width:640px){.header,.stats,.filters,.tweet-list,.pagination{padding-left:16px;padding-right:16px}.stats{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<div class="header">
+<h1><span>공부법</span> 트윗 자동생성 대시보드</h1>
+<div class="header-actions"><span class="auto-label" id="lastUpdated"></span><button class="refresh-btn" onclick="loadData()">새로고침</button></div>
+</div>
+<div class="stats">
+<div class="stat-card"><div class="label">전체 생성</div><div class="value blue" id="totalCount">-</div></div>
+<div class="stat-card"><div class="label">포스팅 완료</div><div class="value green" id="postedCount">-</div></div>
+<div class="stat-card"><div class="label">대기 중</div><div class="value orange" id="generatedCount">-</div></div>
+<div class="stat-card"><div class="label">실패</div><div class="value red" id="failedCount">-</div></div>
+<div class="stat-card"><div class="label">오늘 포스팅</div><div class="value purple" id="todayCount">-</div></div>
+</div>
+<div class="filters">
+<button class="filter-tab active" onclick="setFilter('all',this)">전체</button>
+<button class="filter-tab" onclick="setFilter('posted',this)">포스팅 완료</button>
+<button class="filter-tab" onclick="setFilter('generated',this)">대기 중</button>
+<button class="filter-tab" onclick="setFilter('failed',this)">실패</button>
+</div>
+<div id="tweetList" class="tweet-list"><div class="loading"><div class="spinner"></div><p style="margin-top:12px">불러오는 중...</p></div></div>
+<div class="pagination" id="pagination"></div>
+<script>
+const sb=window.supabase.createClient('https://nuauodpvylurlynlwcfy.supabase.co','sb_publishable_A-2qRZZRzB5p-ClUDGygzQ_KX6wAykW');
+let allTweets=[],currentFilter='all',currentPage=1;const PS=10;
+async function loadData(){
+document.getElementById('tweetList').innerHTML='<div class="loading"><div class="spinner"></div><p style="margin-top:12px">불러오는 중...</p></div>';
+try{const{data,error}=await sb.from('generated_tweets').select('*').order('created_at',{ascending:false});if(error)throw error;allTweets=data||[];updateStats();currentPage=1;renderTweets();document.getElementById('lastUpdated').textContent='업데이트: '+new Date().toLocaleTimeString('ko-KR')}
+catch(e){document.getElementById('tweetList').innerHTML=`<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">데이터를 불러올 수 없습니다<br><small style="color:#71767b">${e.message}</small></div></div>`}}
+function updateStats(){const p=allTweets.filter(t=>t.status==='posted').length,g=allTweets.filter(t=>t.status==='generated').length,f=allTweets.filter(t=>t.status==='failed').length,today=new Date().toISOString().slice(0,10),tp=allTweets.filter(t=>t.status==='posted'&&t.created_at&&t.created_at.slice(0,10)===today).length;document.getElementById('totalCount').textContent=allTweets.length;document.getElementById('postedCount').textContent=p;document.getElementById('generatedCount').textContent=g;document.getElementById('failedCount').textContent=f;document.getElementById('todayCount').textContent=tp}
+function setFilter(f,el){currentFilter=f;currentPage=1;document.querySelectorAll('.filter-tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderTweets()}
+function getFiltered(){return currentFilter==='all'?allTweets:allTweets.filter(t=>t.status===currentFilter)}
+function renderTweets(){const filtered=getFiltered(),totalPages=Math.max(1,Math.ceil(filtered.length/PS));if(currentPage>totalPages)currentPage=totalPages;const start=(currentPage-1)*PS,page=filtered.slice(start,start+PS),c=document.getElementById('tweetList');
+if(!page.length){c.innerHTML='<div class="empty"><div class="empty-icon">📝</div><div class="empty-text">아직 생성된 트윗이 없습니다</div></div>';document.getElementById('pagination').innerHTML='';return}
+c.innerHTML=page.map((t,i)=>{const date=t.created_at?new Date(t.created_at).toLocaleString('ko-KR',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}):'-';const sl={posted:'포스팅 완료',generated:'대기 중',failed:'실패'}[t.status]||t.status;const xLink=t.tweet_id?`<a class="tweet-link" href="https://x.com/i/web/status/${t.tweet_id}" target="_blank">X에서 보기 →</a>`:'';let sources='';if(t.source_trends){try{const arr=typeof t.source_trends==='string'?JSON.parse(t.source_trends):t.source_trends;if(arr.length){const id=`src-${start+i}`;sources=`<button class="source-toggle" onclick="document.getElementById('${id}').classList.toggle('open')">📊 참고 트렌드 보기</button><div class="source-list" id="${id}">${arr.map((s,j)=>`${j+1}. ${s}`).join('<br>')}</div>`}}catch(e){}}
+return`<div class="tweet-card"><div class="tweet-top"><span class="tweet-status status-${t.status}">${sl}</span><span class="tweet-date">${date}</span></div><div class="tweet-text">${esc(t.tweet_text)}</div><div class="tweet-meta"><span class="tweet-chars">${t.tweet_text.length}자</span>${xLink}<button class="tweet-copy" onclick="copyTweet(this,\`${escJs(t.tweet_text)}\`)">복사</button></div>${sources}</div>`}).join('');
+const pg=document.getElementById('pagination');if(totalPages<=1){pg.innerHTML='';return}let h=`<button class="page-btn" onclick="goPage(${currentPage-1})" ${currentPage===1?'disabled':''}>←</button>`;for(let p=1;p<=totalPages;p++)h+=`<button class="page-btn ${p===currentPage?'active':''}" onclick="goPage(${p})">${p}</button>`;h+=`<button class="page-btn" onclick="goPage(${currentPage+1})" ${currentPage===totalPages?'disabled':''}>→</button>`;pg.innerHTML=h}
+function goPage(p){const tp=Math.ceil(getFiltered().length/PS);if(p<1||p>tp)return;currentPage=p;renderTweets();window.scrollTo({top:0,behavior:'smooth'})}
+function copyTweet(btn,text){navigator.clipboard.writeText(text).then(()=>{btn.textContent='복사됨!';btn.style.color='var(--green)';btn.style.borderColor='var(--green)';setTimeout(()=>{btn.textContent='복사';btn.style.color='';btn.style.borderColor=''},1500)})}
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function escJs(s){return s.replace(/\\/g,'\\\\').replace(/`/g,'\\`').replace(/\$/g,'\\$').replace(/\n/g,'\\n')}
+loadData();setInterval(loadData,30000);
+</script>
+</body>
+</html>
